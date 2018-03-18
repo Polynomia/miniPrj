@@ -59,7 +59,7 @@ def load_cifar10():
     
     return data  
 
-def gen_batch(data, batch_size, num_iter):
+def gen_batch(data, batch_size, epoches):
     '''Get data in batches. 
     Args:
         data: the zip of data and labels
@@ -71,7 +71,7 @@ def gen_batch(data, batch_size, num_iter):
 
     data = np.array(data)
     index = len(data)
-    for i in range(num_iter):
+    while True:
         index += batch_size
         if (index + batch_size > len(data)):
             index = 0

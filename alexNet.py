@@ -1,9 +1,6 @@
 import tensorflow as tf
 import numpy as np 
 import getData
-import matplotlib.pyplot as plt
-import os
-from scipy.misc import toimage
 _NUM_CLASS = 10
 
 def lrn(name, previous_layer):
@@ -22,7 +19,7 @@ def lrn(name, previous_layer):
                                               bias=2.0)
         tf.summary.histogram('lrn', lrn)
     return lrn
-
+ 
 def conv(name, previous_layer, config):
     '''Sets up the convolutional layer.
     Args:
@@ -46,8 +43,9 @@ def conv(name, previous_layer, config):
                                                 dtype=tf.float32,
                                                 stddev=1e-2), name='weights')
         conv = tf.nn.conv2d(previous_layer, kernel, [1, config['stride_height'], config['stride_width'], 1], padding='SAME')
-        bias = tf.Variable(tf.constant(config['bias'], shape=[config['out_channels']], dtype=tf.float32),
-                            trainable=True, name='bias')
+        # bias = tf.Variable(tf.constant(config['bias'], shape=[config['out_channels']], dtype=tf.float32),
+                            # trainable=True, name='bias')
+        bias = tf.Variable(tf.random_normal([config['out_channels']], stddev=0.35), trainable=True, name='bias')
         conv_relu = tf.nn.relu(bias+conv, name = name)
         tf.summary.histogram('conv_relu',conv_relu)
         tf.summary.histogram('conv', conv)
@@ -89,9 +87,10 @@ def fc(name, previous_layer, config):
     '''
     with tf.name_scope(name) as scope:
         weights = tf.Variable(tf.random_normal(shape=(config['input'], config['output']), 
-                                                mean=0, stddev=0.01), name='weights')
-        bias = tf.Variable(tf.constant(1, shape=[config['output']], dtype=tf.float32),
-                            trainable=True, name='bias')
+                                                mean=0, stddev=1.0), trainable=True, name='weights')
+        # bias = tf.Variable(tf.constant(1, shape=[config['output']], dtype=tf.float32),
+                            # trainable=True, name='bias')
+        bias = tf.Variable(tf.random_normal([config['output']], stddev=0.35), trainable=True, name='bias')
         fc_relu = tf.nn.relu(tf.matmul(previous_layer, weights)+bias)
         tf.summary.histogram('bias', bias)
         tf.summary.histogram('weights', weights)
@@ -108,104 +107,183 @@ def inference(images):
     '''
 
     # conv1
-    config_conv1 = {
-        'filter_height' : 11,
-        'filter_width' : 11,
-        'stride_height' : 4,
-        'stride_width' : 4,
-        'in_channels' : 3,
-        'out_channels' : 64,
-        'bias' : 0
-    }
-    conv1 = conv('conv1', images, config_conv1)
+    # config_conv1 = {
+    #     'filter_height' : 11,
+    #     'filter_width' : 11,
+    #     'stride_height' : 4,
+    #     'stride_width' : 4,
+    #     'in_channels' : 3,
+    #     'out_channels' : 64,
+    #     'bias' : 0
+    # }
+    # conv1 = conv('conv1', images, config_conv1)
+    conv1 = tf.layers.conv2d(
+        inputs=images, 
+        filters=64, 
+        kernel_size=[11, 11],
+        strides=[4, 4],
+        padding='same', 
+        activation=tf.nn.relu)
+    tf.summary.histogram('conv1', conv1)
 
-    lrn1 = lrn('lrn1', conv1)
+    # lrn1 = lrn('lrn1', conv1)
+    lrn1 = tf.nn.local_response_normalization(
+        conv1,
+        alpha=1e-4,
+        beta=0.75,
+        depth_radius=2,
+        bias=2.0)
+    tf.summary.histogram('lrn1', lrn1)
 
-    config_pool1 = {
-        'filter_height' : 3,
-        'filter_width' : 3,
-        'stride_height' : 2,
-        'stride_width' : 2,
-    }
-    pool1 = pool('pool1', lrn1, config_pool1)
+    # config_pool1 = {
+    #     'filter_height' : 3,
+    #     'filter_width' : 3,
+    #     'stride_height' : 2,
+    #     'stride_width' : 2,
+    # }
+    # pool1 = pool('pool1', lrn1, config_pool1)
+    pool1 = tf.layers.max_pooling2d(
+        inputs=lrn1,
+        pool_size=[3, 3],
+        strides=2,
+        padding='same')
+    tf.summary.histogram('pool1', pool1)
 
-    config_conv2= {
-        'filter_height' : 5,
-        'filter_width' : 5,
-        'stride_height' : 1,
-        'stride_width' : 1,
-        'in_channels' : 64,
-        'out_channels' : 192,
-        'bias' : 1
-    }
-    conv2 = conv('conv2', pool1, config_conv2)
+    # config_conv2= {
+    #     'filter_height' : 5,
+    #     'filter_width' : 5,
+    #     'stride_height' : 1,
+    #     'stride_width' : 1,
+    #     'in_channels' : 64,
+    #     'out_channels' : 192,
+    #     'bias' : 0
+    # }
+    # conv2 = conv('conv2', pool1, config_conv2)
+    conv2 = tf.layers.conv2d(
+        inputs=pool1, 
+        filters=192, 
+        kernel_size=[5, 5],
+        padding='same', 
+        activation=tf.nn.relu)
+    tf.summary.histogram('conv2', conv2)
 
-    lrn2 = lrn('lrn2', conv2)
+    # lrn2 = lrn('lrn2', conv2)
+    lrn2 = tf.nn.local_response_normalization(
+        conv2,
+        alpha=1e-4,
+        beta=0.75,
+        depth_radius=2,
+        bias=2.0)
+    tf.summary.histogram('lrn2', lrn2)
     
-    config_pool2 = {
-        'filter_height' : 3,
-        'filter_width' : 3,
-        'stride_height' : 2,
-        'stride_width' : 2,
-    }
-    pool2 = pool('pool2', lrn2, config_pool2)
+    # config_pool2 = {
+    #     'filter_height' : 3,
+    #     'filter_width' : 3,
+    #     'stride_height' : 2,
+    #     'stride_width' : 2,
+    # }
+    # pool2 = pool('pool2', lrn2, config_pool2)
+    pool2 = tf.layers.max_pooling2d(
+        inputs=lrn2,
+        pool_size=[3, 3],
+        strides=2,
+        padding='same')
+    tf.summary.histogram('pool2', pool2)
 
-    config_conv3 = {
-        'filter_height' : 3,
-        'filter_width' : 3,
-        'stride_height' : 1,
-        'stride_width' : 1,
-        'in_channels' : 192,
-        'out_channels' : 384,
-        'bias' : 0
-    }
-    conv3 = conv('conv3', pool2, config_conv3) 
+    # config_conv3 = {
+    #     'filter_height' : 3,
+    #     'filter_width' : 3,
+    #     'stride_height' : 1,
+    #     'stride_width' : 1,
+    #     'in_channels' : 192,
+    #     'out_channels' : 384,
+    #     'bias' : 0
+    # }
+    # conv3 = conv('conv3', pool2, config_conv3) 
+    conv3 = tf.layers.conv2d(
+        inputs=pool2, 
+        filters=384, 
+        kernel_size=[3, 3],
+        padding='same', 
+        activation=tf.nn.relu)
+    tf.summary.histogram('conv3', conv3)
 
-    config_conv4 = {
-        'filter_height' : 3,
-        'filter_width' : 3,
-        'stride_height' : 1,
-        'stride_width' : 1,
-        'in_channels' : 384,
-        'out_channels' : 256,
-        'bias' : 0
-    }
-    conv4 = conv('conv4', conv3, config_conv4) 
+    # config_conv4 = {
+    #     'filter_height' : 3,
+    #     'filter_width' : 3,
+    #     'stride_height' : 1,
+    #     'stride_width' : 1,
+    #     'in_channels' : 384,
+    #     'out_channels' : 256,
+    #     'bias' : 0
+    # }
+    # conv4 = conv('conv4', conv3, config_conv4) 
+    conv4 = tf.layers.conv2d(
+        inputs=conv3, 
+        filters=256, 
+        kernel_size=[3, 3],
+        padding='same', 
+        activation=tf.nn.relu)
+    tf.summary.histogram('conv4', conv4)
 
-    config_conv5 = {
-        'filter_height' : 3,
-        'filter_width' : 3,
-        'stride_height' : 1,
-        'stride_width' : 1,
-        'in_channels' : 256,
-        'out_channels' : 256,
-        'bias' : 0
-    }
-    conv5 = conv('conv5', conv4, config_conv5) 
+    # config_conv5 = {
+    #     'filter_height' : 3,
+    #     'filter_width' : 3,
+    #     'stride_height' : 1,
+    #     'stride_width' : 1,
+    #     'in_channels' : 256,
+    #     'out_channels' : 256,
+    #     'bias' : 0
+    # }
+    # conv5 = conv('conv5', conv4, config_conv5) 
+    conv5 = tf.layers.conv2d(
+        inputs=conv4, 
+        filters=256, 
+        kernel_size=[3, 3],
+        padding='same', 
+        activation=tf.nn.relu)
+    tf.summary.histogram('conv5', conv5)
 
-    config_pool5 = {
-        'filter_height' : 3,
-        'filter_width' : 3,
-        'stride_height' : 2,
-        'stride_width' : 2,
-    }
-    pool5 = pool('pool5', conv5, config_pool5)
-    print(tf.shape(pool5))
-    print(pool5.get_shape())
+    # config_pool5 = {
+    #     'filter_height' : 3,
+    #     'filter_width' : 3,
+    #     'stride_height' : 2,
+    #     'stride_width' : 2,
+    # }
+    # pool5 = pool('pool5', conv5, config_pool5)
+    pool5 = tf.layers.max_pooling2d(
+        inputs=conv5,
+        pool_size=[3, 3],
+        strides=2,
+        padding='same')
+    tf.summary.histogram('pool5', pool5)
+
+
     # fc layers
     reshape = tf.reshape(pool5, [-1, 256])
 
-    config = {
-        'input' : 256,
-        'output' : 384
-    }  
-    fc1 = fc('fc1', reshape, config)
+    # config = {
+    #     'input' : 256,
+    #     'output' : 384
+    # }  
+    # fc1 = fc('fc1', reshape, config)
+    fc1 = tf.layers.dense(
+        inputs=reshape, 
+        units=384, 
+        activation=tf.nn.relu)
+    tf.summary.histogram('fc1', fc1)
 
-    config = {
-        'input' : 384,
-        'output' : _NUM_CLASS
-    }  
-    fc2 = fc('fc2', fc1, config)
+    # config = {
+    #     'input' : 384,
+    #     'output' : _NUM_CLASS
+    # }  
+    # fc2 = fc('fc2', fc1, config)
+    # print(tf.shape(fc2))
+    fc2 = tf.layers.dense(
+        inputs=fc1, 
+        units=_NUM_CLASS, 
+        activation=tf.nn.relu)
+    tf.summary.histogram('fc2', fc2)
 
     return fc2
 
@@ -219,6 +297,8 @@ def loss(logits, labels):
     '''
 
     with tf.name_scope('Loss'):
+        # print(tf.shape(logits))
+        # print(tf.shape(labels))
         # Operation to determine the cross entropy between logits and labels
         loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
                                         logits=logits, labels=labels, name='cross_entropy'))
@@ -229,7 +309,7 @@ def loss(logits, labels):
     return loss
 
 
-def training(loss, learning_rate, my_global_step):
+def training(loss, learning_rate, global_step):
     '''Sets up the training operation.
     Creates an optimizer and applies the gradients to all trainable variables.
     Args:
@@ -243,7 +323,7 @@ def training(loss, learning_rate, my_global_step):
     # Create a gradient descent optimizer
     # (which also increments the global step counter)
     train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(
-        loss, global_step=my_global_step)
+        loss, global_step=global_step)
 
     return train_step
 
@@ -268,15 +348,6 @@ def evaluation(logits, labels):
 
     return accuracy
 
-def visualize_image(X,Y,names):
-	#print(img.shape)
-	plt.imshow(X)
-	plt.title(names[Y])
-	#print(Y[id])
-	#plt.show()
-	dir = os.path.abspath("output/samples")
-	plt.savefig(dir+"/"+names[Y])
-
 if __name__ == '__main__':
     # Load CIFAR-10 data
     data_sets = getData.load_cifar10()
@@ -294,14 +365,8 @@ if __name__ == '__main__':
         batches = getData.gen_batch(list(zipped_data), 128, 20)
         batch = next(batches)
         images_batch, labels_batch = zip(*batch)
-        # feed_dict = {
-        #     images_placeholder: np.array(images_batch),
-        #     labels_placeholder: np.array(labels_batch)
-        # }
-        names = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
-        a = np.array(images_batch)
-        b = np.array(labels_batch)
-        print(a.shape)
-        plt.imshow(toimage(a[1]))
-        plt.title(names[b[1]])
-        plt.show()
+        feed_dict = {
+            images_placeholder: np.array(images_batch),
+            labels_placeholder: np.array(labels_batch)
+        }
+        sess.run(logits, feed_dict)
