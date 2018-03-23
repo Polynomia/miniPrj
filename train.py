@@ -2,7 +2,7 @@ import old_alexNet,getData,os.path
 import tensorflow as tf 
 from datetime import datetime
 
-with tf.device('/gpu:3'):
+with tf.device('/gpu:2'):
     flags = tf.flags
     FLAGS = flags.FLAGS
  #   flags.DEFINE_float('learning_rate', 0.01, 'Learning rate for the training.')
@@ -21,9 +21,10 @@ with tf.device('/gpu:3'):
     # Define input placeholders
     images_placeholder = tf.placeholder(tf.float32, shape=(None, 32, 32, 3),name='images')
     labels_placeholder = tf.placeholder(tf.int64, shape=None, name='image-labels')
+    keeprob_placeholder = tf.placeholder(tf.float32, shape=None, name='keep_prob')
 
     # Operation for the classifier's result
-    logits = old_alexNet.inference(images_placeholder)
+    logits = old_alexNet.inference(images_placeholder, keeprob_placeholder)
 
     # Operation for the loss function
     loss = old_alexNet.loss(logits, labels_placeholder)
@@ -66,7 +67,8 @@ with tf.device('/gpu:3'):
                 images_batch, labels_batch = zip(*batch)
                 feed_dict = {
                     images_placeholder: images_batch,
-                    labels_placeholder: labels_batch
+                    labels_placeholder: labels_batch,
+                    keeprob_placeholder: 0.5
                 }
                 # train_loss = sess.run(loss, feed_dict=feed_dict)
                 # print('Step {:d}, loss {:g}'.format(j, train_loss))
@@ -81,11 +83,11 @@ with tf.device('/gpu:3'):
             print('Epoch {:d}, training accuracy {:g}'.format(i, train_accuracy))
             train_writer.add_summary(summary, i)
             summary, test_accuracy = sess.run([merged, accuracy], feed_dict={images_placeholder: data_sets['test_data'],
-                                                        labels_placeholder: data_sets['test_label']})
+                                                        labels_placeholder: data_sets['test_label'], keeprob_placeholder: 1})
             test_writer.add_summary(summary, i)
             print('Test accuracy {:g}'.format(test_accuracy))
                
-            if (i + 1) % 50 == 0:
+            if (i + 1) % 20 == 0:
                 checkpoint_file = os.path.join(FLAGS.train_dir, 'checkpoint')
                 saver.save(sess, checkpoint_file, global_step=i)
                 print('Saved checkpoint') 

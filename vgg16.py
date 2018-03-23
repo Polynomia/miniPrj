@@ -14,11 +14,11 @@ import numpy as np
 
 
 class vgg16:
-    def __init__(self, imgs, weights=None, sess=None):
+    def __init__(self, imgs, keep_prob, weights=None, sess=None):
         self.imgs = imgs
         self.NUM_ClASSES = 10
         self.convlayers(imgs)
-        self.fc_layers()
+        self.fc_layers(keep_prob)
         self.weights_file = weights
 
 
@@ -35,6 +35,9 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv1_1 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
+
 
         # conv1_2
         with tf.name_scope('conv1_2') as scope:
@@ -46,6 +49,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv1_2 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # pool1
         self.pool1 = tf.nn.max_pool(self.conv1_2,
@@ -64,6 +69,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv2_1 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # conv2_2
         with tf.name_scope('conv2_2') as scope:
@@ -75,6 +82,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv2_2 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # pool2
         self.pool2 = tf.nn.max_pool(self.conv2_2,
@@ -93,6 +102,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv3_1 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # conv3_2
         with tf.name_scope('conv3_2') as scope:
@@ -104,6 +115,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv3_2 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # conv3_3
         with tf.name_scope('conv3_3') as scope:
@@ -115,6 +128,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv3_3 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # pool3
         self.pool3 = tf.nn.max_pool(self.conv3_3,
@@ -133,6 +148,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv4_1 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # conv4_2
         with tf.name_scope('conv4_2') as scope:
@@ -144,6 +161,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv4_2 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # conv4_3
         with tf.name_scope('conv4_3') as scope:
@@ -155,6 +174,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv4_3 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # pool4
         self.pool4 = tf.nn.max_pool(self.conv4_3,
@@ -173,6 +194,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv5_1 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # conv5_2
         with tf.name_scope('conv5_2') as scope:
@@ -184,6 +207,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv5_2 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # conv5_3
         with tf.name_scope('conv5_3') as scope:
@@ -195,6 +220,8 @@ class vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv5_3 = tf.nn.relu(out, name=scope)
             self.parameters += [kernel, biases]
+            tf.summary.histogram('kernel', kernel)
+            tf.summary.histogram('bias', biases)
 
         # pool5
         self.pool5 = tf.nn.max_pool(self.conv5_3,
@@ -203,21 +230,27 @@ class vgg16:
                                padding='SAME',
                                name='pool4')
 
-    def fc_layers(self):
+    def dropout(self, name, previous_layer, keep_prob):
+        with tf.name_scope(name) as scope:
+            dropout = tf.nn.dropout(previous_layer, keep_prob = keep_prob)
+            tf.summary.histogram(name, dropout)
+        return dropout
+
+    def fc_layers(self, keep_prob):
         # fc1
         with tf.variable_scope('fc1') as scope:
             shape = int(np.prod(self.pool5.get_shape()[1:]))
-            fc1w = tf.get_variable('weights', [shape, 4096], trainable=True)
-            # fc1w = tf.Variable(tf.truncated_normal([shape, 4096],
-            #                                              dtype=tf.float32,
-            #                                              stddev=1e-1), name='weights')
-            # fc1b = tf.Variable(tf.constant(1.0, shape=[4096], dtype=tf.float32),
-            #                      trainable=True, name='biases')
+            fc1w = tf.get_variable('fcweights', [shape, 4096], trainable=True)
             fc1b = tf.get_variable('bias', [4096], trainable=True)
             pool5_flat = tf.reshape(self.pool5, [-1, shape])
             fc1l = tf.nn.bias_add(tf.matmul(pool5_flat, fc1w), fc1b)
             self.fc1 = tf.nn.relu(fc1l)
             self.parameters += [fc1w, fc1b]
+            tf.summary.histogram('fc1w', fc1w)
+            tf.summary.histogram('fc1b', fc1b)
+
+        # dropout1
+        self.dropou1 = self.dropout('dropout1', self.fc1, keep_prob)
 
         # fc2
         with tf.variable_scope('fc2') as scope:
@@ -226,22 +259,29 @@ class vgg16:
             #                                              stddev=1e-1), name='weights')
             # fc2b = tf.Variable(tf.constant(1.0, shape=[4096], dtype=tf.float32),
             #                      trainable=True, name='biases')
-            fc2w = tf.get_variable('weights', [4096, 4096], trainable=True)
-            fc2b = tf.get_variable('bias', [4096], trainable=True)
-            fc2l = tf.nn.bias_add(tf.matmul(self.fc1, fc2w), fc2b)
+            fc2w = tf.get_variable('fcweights', [4096, 2048], trainable=True)
+            fc2b = tf.get_variable('bias', [2048], trainable=True)
+            fc2l = tf.nn.bias_add(tf.matmul(self.dropou1, fc2w), fc2b)
             self.fc2 = tf.nn.relu(fc2l)
             self.parameters += [fc2w, fc2b]
+            tf.summary.histogram('fc2w', fc2w)
+            tf.summary.histogram('fc2b', fc2b)
+
+        # dropout2
+        self.dropou2 = self.dropout('dropout2', self.fc2, keep_prob)
 
         # fc3
         with tf.variable_scope('fc3') as scope:
-            fc3w = tf.get_variable('weights',
-                            shape=[4096, self.NUM_ClASSES],
+            fc3w = tf.get_variable('fcweights',
+                            shape=[2048, self.NUM_ClASSES],
                             trainable=True)
             fc3b = tf.get_variable('bias',
                             shape=[self.NUM_ClASSES],
                             trainable=True)
-            self.fc3 = tf.nn.relu(tf.nn.bias_add(tf.matmul(self.fc2, fc3w), fc3b))
+            self.fc3 = tf.nn.relu(tf.nn.bias_add(tf.matmul(self.dropou2, fc3w), fc3b))
             self.parameters += [fc3w, fc3b]
+            tf.summary.histogram('fc3w', fc3w)
+            tf.summary.histogram('fc3b', fc3b)
         
 
     def load_weights(self, sess):

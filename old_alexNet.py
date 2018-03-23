@@ -106,8 +106,14 @@ def fc(name, previous_layer, config):
         tf.summary.histogram('fc_relu', fc_relu)
     return fc_relu 
 
+def dropout(name, previous_layer, keep_prob):
+    with tf.name_scope(name) as scope:
+        dropout = tf.nn.dropout(previous_layer, keep_prob = keep_prob)
+        tf.summary.histogram(name, dropout)
+    return dropout
 
-def inference(images):
+
+def inference(images, keep_prob):
     '''Build the model up to where it may be used for inference.
     Args:
         images: Images placeholder (input data).
@@ -117,8 +123,8 @@ def inference(images):
 
     # conv1
     config_conv1 = {
-        'filter_height' : 11,
-        'filter_width' : 11,
+        'filter_height' : 5,
+        'filter_width' : 5,
         'stride_height' : 4,
         'stride_width' : 4,
         'in_channels' : 3,
@@ -131,16 +137,16 @@ def inference(images):
     lrn1 = lrn('lrn1', conv1)
 
     config_pool1 = {
-        'filter_height' : 3,
-        'filter_width' : 3,
-        'stride_height' : 2,
-        'stride_width' : 2,
+        'filter_height' : 2,
+        'filter_width' : 2,
+        'stride_height' : 1,
+        'stride_width' : 1,
     }
     pool1 = pool('pool1', lrn1, config_pool1)
 
     config_conv2= {
-        'filter_height' : 5,
-        'filter_width' : 5,
+        'filter_height' : 3,
+        'filter_width' : 3,
         'stride_height' : 1,
         'stride_width' : 1,
         'in_channels' : 64,
@@ -155,8 +161,8 @@ def inference(images):
     config_pool2 = {
         'filter_height' : 3,
         'filter_width' : 3,
-        'stride_height' : 2,
-        'stride_width' : 2,
+        'stride_height' : 1,
+        'stride_width' : 1,
     }
     pool2 = pool('pool2', lrn2, config_pool2)
 
@@ -173,8 +179,8 @@ def inference(images):
     conv3 = conv('conv3', pool2, config_conv3) 
 
     config_conv4 = {
-        'filter_height' : 3,
-        'filter_width' : 3,
+        'filter_height' : 1,
+        'filter_width' : 1,
         'stride_height' : 1,
         'stride_width' : 1,
         'in_channels' : 384,
@@ -206,19 +212,21 @@ def inference(images):
     print(tf.shape(pool5))
     print(pool5.get_shape())
     # fc layers
-    reshape = tf.reshape(pool5, [-1, 256])
+    reshape = tf.reshape(pool5, [-1, 256*4*4])
 
     config = {
-        'input' : 256,
+        'input' : 256*4*4,
         'output' : 384
     }  
     fc1 = fc('fc1', reshape, config)
+
+    dropout1 = dropout('dropou1', fc1, keep_prob)
 
     config = {
         'input' : 384,
         'output' : _NUM_CLASS
     }  
-    fc2 = fc('fc2', fc1, config)
+    fc2 = fc('fc2', dropout1, config)
 
     return fc2
 
@@ -233,8 +241,10 @@ def loss(logits, labels):
 
     with tf.name_scope('Loss'):
         # Operation to determine the cross entropy between logits and labels
+        vars   = tf.trainable_variables() 
+        lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in vars if 'bias' not in v.name ]) * 0.001
         loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-                                        logits=logits, labels=labels, name='cross_entropy'))
+                                        logits=logits, labels=labels, name='cross_entropy')) + lossL2
 
         # Add a scalar summary for the loss
         tf.summary.scalar('loss', loss)
@@ -299,8 +309,9 @@ if __name__ == '__main__':
     # Define input placeholders
     images_placeholder = tf.placeholder(tf.float32, shape=(None, 32, 32, 3),name='images')
     labels_placeholder = tf.placeholder(tf.int64, shape=None, name='image-labels')
+    keeprob_placeholder = tf.placeholder(tf.float32, shape=None, name='keep_prob')
     # Operation for the classifier's result
-    logits = inference(images_placeholder)
+    logits = inference(images_placeholder, keeprob_placeholder)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 

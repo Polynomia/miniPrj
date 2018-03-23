@@ -8,7 +8,7 @@ with tf.device('/gpu:3'):
     flags = tf.flags
     FLAGS = flags.FLAGS
  #   flags.DEFINE_float('learning_rate', 0.01, 'Learning rate for the training.')
-    flags.DEFINE_integer('max_epoches', 10, 'Number of epoches to run trainer.')
+    flags.DEFINE_integer('max_epoches', 50, 'Number of epoches to run trainer.')
     flags.DEFINE_integer('batch_size', 128,
     'Batch size. Must divide dataset sizes without remainder.')
     flags.DEFINE_string('train_dir', 'finetune_logs',
@@ -16,7 +16,7 @@ with tf.device('/gpu:3'):
     flags.DEFINE_string('weights', 'vgg16_weights.npz',
     'Pretrained model weights')
 
-    learning_rate = 0.01
+    learning_rate = 0.001
 
     # Put logs for each run in separate directory
     train_logdir = FLAGS.train_dir + '/' + datetime.now().strftime('%Y%m%d-%H%M%S') + '/train/'
@@ -25,15 +25,18 @@ with tf.device('/gpu:3'):
     # Define input placeholders
     images_placeholder = tf.placeholder(tf.float32, shape=(None, 32, 32, 3),name='images')
     labels_placeholder = tf.placeholder(tf.int64, shape=None, name='image-labels')
+    keeprob_placeholder = tf.placeholder(tf.float32, shape=None, name='keep_prob')
 
     # Create a variable to track the global step
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
-    model = vgg16(images_placeholder,weights='vgg16_weights.npz')
+    model = vgg16(images_placeholder, keeprob_placeholder, weights='vgg16_weights.npz')
     score = model.fc3
 
     with tf.name_scope("loss"):
-        loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=score,labels=labels_placeholder))
+        vars   = tf.trainable_variables() 
+        lossL2 = tf.add_n([ tf.nn.l2_loss(v) for v in vars if 'fcweight' in v.name ]) * 0.001
+        loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=score,labels=labels_placeholder)) + lossL2
         tf.summary.scalar('cross_entropy', loss)
     
     with tf.name_scope("train"):
@@ -71,7 +74,8 @@ with tf.device('/gpu:3'):
                 images_batch, labels_batch = zip(*batch)
                 feed_dict = {
                     images_placeholder: images_batch,
-                    labels_placeholder: labels_batch
+                    labels_placeholder: labels_batch,
+                    keeprob_placeholder: 0.5
                 }
                 # Perform a single training step
                 sess.run([optimizer, loss], feed_dict=feed_dict)
@@ -83,11 +87,15 @@ with tf.device('/gpu:3'):
             print('Step {:d}, training accuracy {:g}'.format(i, train_accuracy))
             train_writer.add_summary(summary, i)
             summary, test_accuracy = sess.run([merged, accuracy], feed_dict={images_placeholder: data_sets['test_data'],
-                                                        labels_placeholder: data_sets['test_label']})
+                                                        labels_placeholder: data_sets['test_label'],keeprob_placeholder: 1})
             test_writer.add_summary(summary, i)
             print('Test accuracy {:g}'.format(test_accuracy))
-               
-            if (i + 1) % 50 == 0:
+            
+
+            
+            if (i + 1) % 10 == 0:
+                learning_rate = learning_rate*0.7
+                optimizer =  tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
                 checkpoint_file = os.path.join(FLAGS.train_dir, 'checkpoint')
                 saver.save(sess, checkpoint_file, global_step=i)
                 print('Saved checkpoint') 
