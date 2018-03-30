@@ -2,12 +2,12 @@ import old_alexNet,getData,os.path
 import tensorflow as tf 
 from datetime import datetime
 
-with tf.device('/gpu:2'):
+with tf.device('/gpu:3'):
     flags = tf.flags
     FLAGS = flags.FLAGS
  #   flags.DEFINE_float('learning_rate', 0.01, 'Learning rate for the training.')
     flags.DEFINE_integer('max_epoches', 200, 'Number of epoches to run trainer.')
-    flags.DEFINE_integer('batch_size', 128,
+    flags.DEFINE_integer('batch_size', 60,
     'Batch size. Must divide dataset sizes without remainder.')
     flags.DEFINE_string('train_dir', 'tf_logs',
     'Directory to put the training data.')
@@ -22,9 +22,9 @@ with tf.device('/gpu:2'):
     images_placeholder = tf.placeholder(tf.float32, shape=(None, 32, 32, 3),name='images')
     labels_placeholder = tf.placeholder(tf.int64, shape=None, name='image-labels')
     keeprob_placeholder = tf.placeholder(tf.float32, shape=None, name='keep_prob')
-
+    isTrain_placeholder = tf.placeholder(tf.bool, name='phase_train')
     # Operation for the classifier's result
-    logits = old_alexNet.inference(images_placeholder, keeprob_placeholder)
+    logits = old_alexNet.inference(images_placeholder, keeprob_placeholder,isTrain_placeholder)
 
     # Operation for the loss function
     loss = old_alexNet.loss(logits, labels_placeholder)
@@ -68,7 +68,8 @@ with tf.device('/gpu:2'):
                 feed_dict = {
                     images_placeholder: images_batch,
                     labels_placeholder: labels_batch,
-                    keeprob_placeholder: 0.5
+                    keeprob_placeholder: 0.5,
+                    isTrain_placeholder: True
                 }
                 # train_loss = sess.run(loss, feed_dict=feed_dict)
                 # print('Step {:d}, loss {:g}'.format(j, train_loss))
@@ -83,7 +84,7 @@ with tf.device('/gpu:2'):
             print('Epoch {:d}, training accuracy {:g}'.format(i, train_accuracy))
             train_writer.add_summary(summary, i)
             summary, test_accuracy = sess.run([merged, accuracy], feed_dict={images_placeholder: data_sets['test_data'],
-                                                        labels_placeholder: data_sets['test_label'], keeprob_placeholder: 1})
+                                                        labels_placeholder: data_sets['test_label'], keeprob_placeholder: 1,isTrain_placeholder: False})
             test_writer.add_summary(summary, i)
             print('Test accuracy {:g}'.format(test_accuracy))
                
@@ -93,6 +94,5 @@ with tf.device('/gpu:2'):
                 print('Saved checkpoint') 
                 learning_rate = learning_rate*0.8
                 train_step = old_alexNet.training(loss, learning_rate, global_step)
-
             
 

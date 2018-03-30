@@ -112,8 +112,40 @@ def dropout(name, previous_layer, keep_prob):
         tf.summary.histogram(name, dropout)
     return dropout
 
+def batch_norm(name,x, n_out, phase_train):
+    """
+    Batch normalization on convolutional maps.
+    Ref.: http://stackoverflow.com/questions/33949786/how-could-i-use-batch-normalization-in-tensorflow
+    Args:
+        x:           Tensor, 4D BHWD input maps
+        n_out:       integer, depth of input maps
+        phase_train: boolean tf.Varialbe, true indicates training phase
+        scope:       string, variable scope
+    Return:
+        normed:      batch-normalized maps
+    """
+    with tf.variable_scope(name) as scope:
+        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
+                                     name='beta', trainable=True)
+        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
+                                      name='gamma', trainable=True)
+        batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
+        ema = tf.train.ExponentialMovingAverage(decay=0.9)
 
-def inference(images, keep_prob):
+        def mean_var_with_update():
+            ema_apply_op = ema.apply([batch_mean, batch_var])
+            with tf.control_dependencies([ema_apply_op]):
+                return tf.identity(batch_mean), tf.identity(batch_var)
+
+        mean, var = tf.cond(phase_train,
+                            mean_var_with_update,
+                            lambda: (ema.average(batch_mean), ema.average(batch_var)))
+        normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
+        tf.summary.histogram('normed', normed)
+    return normed
+
+
+def inference(images, keep_prob, phase_train):
     '''Build the model up to where it may be used for inference.
     Args:
         images: Images placeholder (input data).
@@ -134,7 +166,8 @@ def inference(images, keep_prob):
     }
     conv1 = conv('conv1', images, config_conv1)
 
-    lrn1 = lrn('lrn1', conv1)
+    #lrn1 = lrn('lrn1', conv1)
+    norm1 = batch_norm('bn1',conv1,64,phase_train)
 
     config_pool1 = {
         'filter_height' : 2,
@@ -142,7 +175,7 @@ def inference(images, keep_prob):
         'stride_height' : 1,
         'stride_width' : 1,
     }
-    pool1 = pool('pool1', lrn1, config_pool1)
+    pool1 = pool('pool1', norm1, config_pool1)
 
     config_conv2= {
         'filter_height' : 3,
@@ -156,7 +189,8 @@ def inference(images, keep_prob):
     }
     conv2 = conv('conv2', pool1, config_conv2)
 
-    lrn2 = lrn('lrn2', conv2)
+    #lrn2 = lrn('lrn2', conv2)
+    norm2 = batch_norm('bn2',conv2,192,phase_train)
     
     config_pool2 = {
         'filter_height' : 3,
@@ -164,7 +198,7 @@ def inference(images, keep_prob):
         'stride_height' : 1,
         'stride_width' : 1,
     }
-    pool2 = pool('pool2', lrn2, config_pool2)
+    pool2 = pool('pool2', norm2, config_pool2)
 
     config_conv3 = {
         'filter_height' : 3,
@@ -178,6 +212,8 @@ def inference(images, keep_prob):
     }
     conv3 = conv('conv3', pool2, config_conv3) 
 
+    #norm3 = batch_norm('bn3',conv3,384,phase_train)
+
     config_conv4 = {
         'filter_height' : 1,
         'filter_width' : 1,
@@ -190,6 +226,8 @@ def inference(images, keep_prob):
     }
     conv4 = conv('conv4', conv3, config_conv4) 
 
+    #norm4 = batch_norm('bn4',conv4,256,phase_train)
+
     config_conv5 = {
         'filter_height' : 3,
         'filter_width' : 3,
@@ -201,6 +239,8 @@ def inference(images, keep_prob):
         'stddev': 1
     }
     conv5 = conv('conv5', conv4, config_conv5) 
+
+    #norm5 = batch_norm('bn5',conv5,256,phase_train)
 
     config_pool5 = {
         'filter_height' : 3,
@@ -220,13 +260,13 @@ def inference(images, keep_prob):
     }  
     fc1 = fc('fc1', reshape, config)
 
-    dropout1 = dropout('dropou1', fc1, keep_prob)
+    #dropout1 = dropout('dropou1', fc1, keep_prob)
 
     config = {
         'input' : 384,
         'output' : _NUM_CLASS
     }  
-    fc2 = fc('fc2', dropout1, config)
+    fc2 = fc('fc2', fc1, config)
 
     return fc2
 
@@ -304,14 +344,16 @@ def visualize_image(X,Y,names):
 
 if __name__ == '__main__':
     # Load CIFAR-10 data
-    data_sets = getData.load_cifar10()
+    data_sets = getData.load_more_data()
 
     # Define input placeholders
-    images_placeholder = tf.placeholder(tf.float32, shape=(None, 32, 32, 3),name='images')
+    images_placeholder = tf.placeholder(tf.float32, shape=(None, 28, 28, 3),name='images')
     labels_placeholder = tf.placeholder(tf.int64, shape=None, name='image-labels')
     keeprob_placeholder = tf.placeholder(tf.float32, shape=None, name='keep_prob')
+    isTrain_placeholder = tf.placeholder(tf.bool, name='phase_train')
     # Operation for the classifier's result
-    logits = inference(images_placeholder, keeprob_placeholder)
+    logits = inference(images_placeholder, keeprob_placeholder, isTrain_placeholder)
+    
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
@@ -328,6 +370,6 @@ if __name__ == '__main__':
         a = np.array(images_batch)
         b = np.array(labels_batch)
         print(a.shape)
-        plt.imshow(toimage(a[1]))
-        plt.title(names[b[1]])
+        plt.imshow(toimage(a[22]))
+        plt.title(names[b[22]])
         plt.show()

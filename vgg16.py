@@ -14,13 +14,14 @@ import numpy as np
 
 
 class vgg16:
-    def __init__(self, imgs, keep_prob, weights=None, sess=None):
+    def __init__(self, imgs, keep_prob, phase_train, weights=None, sess=None):
         self.imgs = imgs
+        self.phase_train = phase_train
         self.NUM_ClASSES = 10
         self.convlayers(imgs)
         self.fc_layers(keep_prob)
         self.weights_file = weights
-
+        
 
     def convlayers(self, images):
         self.parameters = []
@@ -37,7 +38,7 @@ class vgg16:
             self.parameters += [kernel, biases]
             tf.summary.histogram('kernel', kernel)
             tf.summary.histogram('bias', biases)
-
+        
 
         # conv1_2
         with tf.name_scope('conv1_2') as scope:
@@ -52,8 +53,10 @@ class vgg16:
             tf.summary.histogram('kernel', kernel)
             tf.summary.histogram('bias', biases)
 
+        self.bn1 = self.batch_norm('bn1',self.conv1_2,64,self.phase_train)
+
         # pool1
-        self.pool1 = tf.nn.max_pool(self.conv1_2,
+        self.pool1 = tf.nn.max_pool(self.bn1,
                                ksize=[1, 2, 2, 1],
                                strides=[1, 2, 2, 1],
                                padding='SAME',
@@ -85,8 +88,10 @@ class vgg16:
             tf.summary.histogram('kernel', kernel)
             tf.summary.histogram('bias', biases)
 
+        self.bn2 = self.batch_norm('bn2',self.conv2_2,128,self.phase_train)
+
         # pool2
-        self.pool2 = tf.nn.max_pool(self.conv2_2,
+        self.pool2 = tf.nn.max_pool(self.bn2,
                                ksize=[1, 2, 2, 1],
                                strides=[1, 2, 2, 1],
                                padding='SAME',
@@ -131,8 +136,10 @@ class vgg16:
             tf.summary.histogram('kernel', kernel)
             tf.summary.histogram('bias', biases)
 
+        self.bn3 = self.batch_norm('bn3',self.conv3_3,256,self.phase_train)
+
         # pool3
-        self.pool3 = tf.nn.max_pool(self.conv3_3,
+        self.pool3 = tf.nn.max_pool(self.bn3,
                                ksize=[1, 2, 2, 1],
                                strides=[1, 2, 2, 1],
                                padding='SAME',
@@ -177,8 +184,10 @@ class vgg16:
             tf.summary.histogram('kernel', kernel)
             tf.summary.histogram('bias', biases)
 
+        self.bn4 = self.batch_norm('bn4',self.conv4_3,512,self.phase_train)
+
         # pool4
-        self.pool4 = tf.nn.max_pool(self.conv4_3,
+        self.pool4 = tf.nn.max_pool(self.bn4,
                                ksize=[1, 2, 2, 1],
                                strides=[1, 2, 2, 1],
                                padding='SAME',
@@ -223,8 +232,10 @@ class vgg16:
             tf.summary.histogram('kernel', kernel)
             tf.summary.histogram('bias', biases)
 
+        self.bn5 = self.batch_norm('bn5',self.conv5_3,512,self.phase_train)
+
         # pool5
-        self.pool5 = tf.nn.max_pool(self.conv5_3,
+        self.pool5 = tf.nn.max_pool(self.bn5,
                                ksize=[1, 2, 2, 1],
                                strides=[1, 2, 2, 1],
                                padding='SAME',
@@ -250,40 +261,67 @@ class vgg16:
             tf.summary.histogram('fc1b', fc1b)
 
         # dropout1
-        self.dropou1 = self.dropout('dropout1', self.fc1, keep_prob)
+        #self.dropou1 = self.dropout('dropout1', self.fc1, keep_prob)
 
         # fc2
         with tf.variable_scope('fc2') as scope:
-            # fc2w = tf.Variable(tf.truncated_normal([4096, 4096],
-            #                                              dtype=tf.float32,
-            #                                              stddev=1e-1), name='weights')
-            # fc2b = tf.Variable(tf.constant(1.0, shape=[4096], dtype=tf.float32),
-            #                      trainable=True, name='biases')
             fc2w = tf.get_variable('fcweights', [4096, 2048], trainable=True)
             fc2b = tf.get_variable('bias', [2048], trainable=True)
-            fc2l = tf.nn.bias_add(tf.matmul(self.dropou1, fc2w), fc2b)
+            fc2l = tf.nn.bias_add(tf.matmul(self.fc1, fc2w), fc2b)
             self.fc2 = tf.nn.relu(fc2l)
             self.parameters += [fc2w, fc2b]
             tf.summary.histogram('fc2w', fc2w)
             tf.summary.histogram('fc2b', fc2b)
 
         # dropout2
-        self.dropou2 = self.dropout('dropout2', self.fc2, keep_prob)
+        #self.dropou2 = self.dropout('dropout2', self.fc2, keep_prob)
 
         # fc3
-        with tf.variable_scope('fc3') as scope:
-            fc3w = tf.get_variable('fcweights',
-                            shape=[2048, self.NUM_ClASSES],
-                            trainable=True)
-            fc3b = tf.get_variable('bias',
-                            shape=[self.NUM_ClASSES],
-                            trainable=True)
-            self.fc3 = tf.nn.relu(tf.nn.bias_add(tf.matmul(self.dropou2, fc3w), fc3b))
-            self.parameters += [fc3w, fc3b]
-            tf.summary.histogram('fc3w', fc3w)
-            tf.summary.histogram('fc3b', fc3b)
+        # with tf.variable_scope('fc3') as scope:
+        #     fc3w = tf.get_variable('fcweights',
+        #                     shape=[2048, self.NUM_ClASSES],
+        #                     trainable=True)
+        #     fc3b = tf.get_variable('bias',
+        #                     shape=[self.NUM_ClASSES],
+        #                     trainable=True)
+        #     self.fc3 = tf.nn.relu(tf.nn.bias_add(tf.matmul(self.fc2, fc3w), fc3b))
+        #     self.parameters += [fc3w, fc3b]
+        #     tf.summary.histogram('fc3w', fc3w)
+        #     tf.summary.histogram('fc3b', fc3b)
         
+    def batch_norm(self, name,x, n_out, phase_train):
+        """
+        Batch normalization on convolutional maps.
+        Ref.: http://stackoverflow.com/questions/33949786/how-could-i-use-batch-normalization-in-tensorflow
+        Args:
+            x:           Tensor, 4D BHWD input maps
+            n_out:       integer, depth of input maps
+            phase_train: boolean tf.Varialbe, true indicates training phase
+            scope:       string, variable scope
+        Return:
+            normed:      batch-normalized maps
+        """
 
+        with tf.variable_scope(name) as scope:
+            beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
+                                        name='beta', trainable=True)
+            gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
+                                        name='gamma', trainable=True)
+            batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
+            ema = tf.train.ExponentialMovingAverage(decay=0.9)
+
+            def mean_var_with_update():
+                ema_apply_op = ema.apply([batch_mean, batch_var])
+                with tf.control_dependencies([ema_apply_op]):
+                    return tf.identity(batch_mean), tf.identity(batch_var)
+
+            mean, var = tf.cond(phase_train,
+                                mean_var_with_update,
+                                lambda: (ema.average(batch_mean), ema.average(batch_var)))
+            normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
+            tf.summary.histogram('normed', normed)
+        return normed
+    
     def load_weights(self, sess):
         weights = np.load(self.weights_file)
         keys = sorted(weights.keys())

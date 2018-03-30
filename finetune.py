@@ -26,12 +26,12 @@ with tf.device('/gpu:3'):
     images_placeholder = tf.placeholder(tf.float32, shape=(None, 32, 32, 3),name='images')
     labels_placeholder = tf.placeholder(tf.int64, shape=None, name='image-labels')
     keeprob_placeholder = tf.placeholder(tf.float32, shape=None, name='keep_prob')
-
+    isTrain_placeholder = tf.placeholder(tf.bool, name='phase_train')
     # Create a variable to track the global step
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
-    model = vgg16(images_placeholder, keeprob_placeholder, weights='vgg16_weights.npz')
-    score = model.fc3
+    model = vgg16(images_placeholder, keeprob_placeholder, isTrain_placeholder,weights='vgg16_weights.npz')
+    score = model.fc2
 
     with tf.name_scope("loss"):
         vars   = tf.trainable_variables() 
@@ -75,7 +75,8 @@ with tf.device('/gpu:3'):
                 feed_dict = {
                     images_placeholder: images_batch,
                     labels_placeholder: labels_batch,
-                    keeprob_placeholder: 0.5
+                    keeprob_placeholder: 0.5,
+                    isTrain_placeholder: True
                 }
                 # Perform a single training step
                 sess.run([optimizer, loss], feed_dict=feed_dict)
@@ -87,14 +88,14 @@ with tf.device('/gpu:3'):
             print('Step {:d}, training accuracy {:g}'.format(i, train_accuracy))
             train_writer.add_summary(summary, i)
             summary, test_accuracy = sess.run([merged, accuracy], feed_dict={images_placeholder: data_sets['test_data'],
-                                                        labels_placeholder: data_sets['test_label'],keeprob_placeholder: 1})
+                                                        labels_placeholder: data_sets['test_label'],keeprob_placeholder: 1,isTrain_placeholder: False})
             test_writer.add_summary(summary, i)
             print('Test accuracy {:g}'.format(test_accuracy))
             
 
             
-            if (i + 1) % 10 == 0:
-                learning_rate = learning_rate*0.7
+            if (i + 1) % 15 == 0:
+                learning_rate = learning_rate*0.8
                 optimizer =  tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
                 checkpoint_file = os.path.join(FLAGS.train_dir, 'checkpoint')
                 saver.save(sess, checkpoint_file, global_step=i)
