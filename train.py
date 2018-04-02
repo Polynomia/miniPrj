@@ -1,6 +1,8 @@
 import old_alexNet,getData,os.path
 import tensorflow as tf 
 from datetime import datetime
+import time,resource,sys
+import numpy as np
 
 with tf.device('/gpu:3'):
     flags = tf.flags
@@ -25,10 +27,10 @@ with tf.device('/gpu:3'):
     isTrain_placeholder = tf.placeholder(tf.bool, name='phase_train')
     # Operation for the classifier's result
     logits = old_alexNet.inference(images_placeholder, keeprob_placeholder,isTrain_placeholder)
-
+    print("[logits] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
     # Operation for the loss function
     loss = old_alexNet.loss(logits, labels_placeholder)
-
+    print("[loss] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
     # Create a variable to track the global step
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
@@ -37,29 +39,31 @@ with tf.device('/gpu:3'):
 
     # Operation calculating the accuracy of our predictions
     accuracy = old_alexNet.evaluation(logits, labels_placeholder)
-
+    print("[acc] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
     # Operation merging summary data for TensorBoard
     merged = tf.summary.merge_all()
-
+    print("[merge] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
     # Define saver to save model state at checkpoints
     saver = tf.train.Saver()
-
+    print("[saver] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
     # Load CIFAR-10 data
     data_sets = getData.load_cifar10()
-
-
+    print("[load data] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
+    # Generate input data batches
+    zipped_data = zip(data_sets['train_data'], data_sets['train_label'])
+    batches = getData.gen_batch(list(zipped_data), FLAGS.batch_size,FLAGS.max_epoches)
+    print("[genBatch] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
     # -----------------------------------------------------------------------------
     # Run the TensorFlow graph
     # -----------------------------------------------------------------------------
-
-    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
+    config=tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth=True
+    with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())
         train_writer = tf.summary.FileWriter(train_logdir, sess.graph)
         test_writer = tf.summary.FileWriter(test_logdir)
 
-        # Generate input data batches
-        zipped_data = zip(data_sets['train_data'], data_sets['train_label'])
-        batches = getData.gen_batch(list(zipped_data), FLAGS.batch_size,FLAGS.max_epoches)
+        
         for i in range(FLAGS.max_epoches):
             for j in range(data_sets['train_data'].shape[0]//FLAGS.batch_size):
                 # Get next input data batch
@@ -74,18 +78,41 @@ with tf.device('/gpu:3'):
                 # train_loss = sess.run(loss, feed_dict=feed_dict)
                 # print('Step {:d}, loss {:g}'.format(j, train_loss))
                 # Perform a single training step
-                sess.run([train_step, loss], feed_dict=feed_dict)
+                _, train_loss = sess.run([train_step, loss], feed_dict=feed_dict)
                 
 
                 # Periodically save checkpoint
 
             # Periodically print out the model's current accuracy
+            print("[train] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
             summary, train_accuracy = sess.run([merged,accuracy], feed_dict=feed_dict)
+            print("[epochtrain] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
             print('Epoch {:d}, training accuracy {:g}'.format(i, train_accuracy))
+            train_summary = tf.Summary(value=[tf.Summary.Value(tag="accuracy", simple_value=train_accuracy), tf.Summary.Value(tag="loss", simple_value=train_loss)])
+            # train_summary.Value.add(tag='accuracy', simple_value=train_accuracy)
+            # train_summary.Value.add(tag='loss', simple_value=train_loss)
             train_writer.add_summary(summary, i)
-            summary, test_accuracy = sess.run([merged, accuracy], feed_dict={images_placeholder: data_sets['test_data'],
-                                                        labels_placeholder: data_sets['test_label'], keeprob_placeholder: 1,isTrain_placeholder: False})
-            test_writer.add_summary(summary, i)
+            train_writer.add_summary(train_summary,i)
+            acc = []
+            test_losses = []
+            for k in range(data_sets['test_data'].shape[0]//FLAGS.batch_size):
+                test_feed_dic = {
+                    images_placeholder: data_sets['test_data'][i*FLAGS.batch_size:(i+1)*FLAGS.batch_size],
+                    labels_placeholder: data_sets['test_label'][i*FLAGS.batch_size:(i+1)*FLAGS.batch_size],
+                    keeprob_placeholder: 0.5,
+                    isTrain_placeholder: False
+                }
+                test_loss, test_accuracy = sess.run([loss, accuracy], feed_dict=test_feed_dic)
+                acc.append(test_accuracy)
+                test_losses.append(test_loss)
+            avg_acc  = float(np.mean(np.asarray(acc)))
+            avg_loss = float(np.mean(np.asarray(test_losses)))
+            #test_summary = tf.Summary()
+            test_summary = tf.Summary(value=[tf.Summary.Value(tag="accuracy", simple_value=avg_acc), tf.Summary.Value(tag="loss", simple_value=avg_loss)])
+            # test_summary.Value.add(tag='accuracy', simple_value=avg_acc)
+            # test_summary.Value.add(tag='loss', simple_value=avg_loss)
+            test_writer.add_summary(test_summary, i)
+            print("[epochtest] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
             print('Test accuracy {:g}'.format(test_accuracy))
                
             if (i + 1) % 20 == 0:

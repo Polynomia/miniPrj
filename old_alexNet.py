@@ -125,24 +125,25 @@ def batch_norm(name,x, n_out, phase_train):
         normed:      batch-normalized maps
     """
     with tf.variable_scope(name) as scope:
-        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
-                                     name='beta', trainable=True)
-        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
-                                      name='gamma', trainable=True)
-        batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
-        ema = tf.train.ExponentialMovingAverage(decay=0.9)
+    #     beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
+    #                                  name='beta', trainable=True)
+    #     gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
+    #                                   name='gamma', trainable=True)
+    #     batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
+    #     ema = tf.train.ExponentialMovingAverage(decay=0.9)
 
-        def mean_var_with_update():
-            ema_apply_op = ema.apply([batch_mean, batch_var])
-            with tf.control_dependencies([ema_apply_op]):
-                return tf.identity(batch_mean), tf.identity(batch_var)
+    #     def mean_var_with_update():
+    #         ema_apply_op = ema.apply([batch_mean, batch_var])
+    #         with tf.control_dependencies([ema_apply_op]):
+    #             return tf.identity(batch_mean), tf.identity(batch_var)
 
-        mean, var = tf.cond(phase_train,
-                            mean_var_with_update,
-                            lambda: (ema.average(batch_mean), ema.average(batch_var)))
-        normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
-        tf.summary.histogram('normed', normed)
-    return normed
+    #     mean, var = tf.cond(phase_train,
+    #                         mean_var_with_update,
+    #                         lambda: (ema.average(batch_mean), ema.average(batch_var)))
+    #     normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
+    #     tf.summary.histogram('normed', normed)
+    # return normed
+        return tf.layers.batch_normalization(x,momentum=0.9,training=phase_train)
 
 
 def inference(images, keep_prob, phase_train):
@@ -212,7 +213,7 @@ def inference(images, keep_prob, phase_train):
     }
     conv3 = conv('conv3', pool2, config_conv3) 
 
-    #norm3 = batch_norm('bn3',conv3,384,phase_train)
+    norm3 = batch_norm('bn3',conv3,384,phase_train)
 
     config_conv4 = {
         'filter_height' : 1,
@@ -224,9 +225,9 @@ def inference(images, keep_prob, phase_train):
         'bias' : 1,
         'stddev': 1
     }
-    conv4 = conv('conv4', conv3, config_conv4) 
+    conv4 = conv('conv4', norm3, config_conv4) 
 
-    #norm4 = batch_norm('bn4',conv4,256,phase_train)
+    norm4 = batch_norm('bn4',conv4,256,phase_train)
 
     config_conv5 = {
         'filter_height' : 3,
@@ -238,9 +239,9 @@ def inference(images, keep_prob, phase_train):
         'bias' : 1,
         'stddev': 1
     }
-    conv5 = conv('conv5', conv4, config_conv5) 
+    conv5 = conv('conv5', norm4, config_conv5) 
 
-    #norm5 = batch_norm('bn5',conv5,256,phase_train)
+    norm5 = batch_norm('bn5',conv5,256,phase_train)
 
     config_pool5 = {
         'filter_height' : 3,
@@ -248,7 +249,7 @@ def inference(images, keep_prob, phase_train):
         'stride_height' : 2,
         'stride_width' : 2,
     }
-    pool5 = pool('pool5', conv5, config_pool5)
+    pool5 = pool('pool5', norm5, config_pool5)
     print(tf.shape(pool5))
     print(pool5.get_shape())
     # fc layers
@@ -287,7 +288,7 @@ def loss(logits, labels):
                                         logits=logits, labels=labels, name='cross_entropy')) + lossL2
 
         # Add a scalar summary for the loss
-        tf.summary.scalar('loss', loss)
+        #tf.summary.scalar('loss', loss)
 
     return loss
 
@@ -307,8 +308,14 @@ def training(loss, learning_rate, my_global_step):
     # (which also increments the global step counter)
     # train_step = tf.train.AdamOptimizer(learning_rate).minimize(
     #     loss, global_step=my_global_step)
-    train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(
-        loss, global_step=my_global_step)
+    # train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(
+    #     loss, global_step=my_global_step)
+
+    # return train_step
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+    with tf.control_dependencies(update_ops):
+        train_step = optimizer.minimize(loss, global_step=my_global_step)
 
     return train_step
 
@@ -329,7 +336,7 @@ def evaluation(logits, labels):
         accuracy =  tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
         # Summary operation for the accuracy
-        tf.summary.scalar('accuracy', accuracy)
+        #tf.summary.scalar('accuracy', accuracy)
 
     return accuracy
 

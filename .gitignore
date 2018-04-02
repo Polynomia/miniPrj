@@ -7,7 +7,7 @@ __pycache__/
 cifar-10-batches-py/
 tf_logs/
 ss.json
-
+sftp.json
 # C extensions
 *.so
 
