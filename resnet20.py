@@ -123,7 +123,7 @@ def loss(logits, labels):
                                         logits=logits, labels=labels, name='cross_entropy')) + lossL2
 
         # Add a scalar summary for the loss
-        tf.summary.scalar('loss', loss)
+        #tf.summary.scalar('loss', loss)
 
     return loss
 
@@ -174,7 +174,7 @@ def evaluation(logits, labels):
         accuracy =  tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
         # Summary operation for the accuracy
-        tf.summary.scalar('accuracy', accuracy)
+        #tf.summary.scalar('accuracy', accuracy)
 
     return accuracy
 

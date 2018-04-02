@@ -1,6 +1,7 @@
 import resnet20,getData,os.path
 import tensorflow as tf 
 from datetime import datetime
+import numpy as np
 
 with tf.device('/gpu:0'):
     flags = tf.flags
@@ -74,7 +75,7 @@ with tf.device('/gpu:0'):
                 # train_loss = sess.run(loss, feed_dict=feed_dict)
                 # print('Step {:d}, loss {:g}'.format(j, train_loss))
                 # Perform a single training step
-                sess.run([train_step, loss], feed_dict=feed_dict)
+                _, train_loss = sess.run([train_step, loss], feed_dict=feed_dict)
                 
 
                 # Periodically save checkpoint
@@ -83,12 +84,27 @@ with tf.device('/gpu:0'):
             summary, train_accuracy , train_loss= sess.run([merged,accuracy,loss], feed_dict=feed_dict)
             print('Epoch {:d}, training accuracy {:g}'.format(i, train_accuracy))
             print('Epoch {:d}, training loss {:g}'.format(i, train_loss))
+            train_summary = tf.Summary(value=[tf.Summary.Value(tag="accuracy", simple_value=train_accuracy), tf.Summary.Value(tag="loss", simple_value=train_loss)])
             train_writer.add_summary(summary, i)
-            summary, test_accuracy, test_loss = sess.run([merged, accuracy, loss], feed_dict={images_placeholder: data_sets['test_data'],
-                                                        labels_placeholder: data_sets['test_label'], keeprob_placeholder: 1,isTrain_placeholder: False})
-            test_writer.add_summary(summary, i)
-            print('Test accuracy {:g}'.format(test_accuracy))
-            print('Test loss {:g}'.format(test_loss))
+            train_writer.add_summary(train_summary,i)
+            acc = []
+            test_losses = []
+            for k in range(data_sets['test_data'].shape[0]//FLAGS.batch_size):
+                test_feed_dic = {
+                    images_placeholder: data_sets['test_data'][i*FLAGS.batch_size:(i+1)*FLAGS.batch_size],
+                    labels_placeholder: data_sets['test_label'][i*FLAGS.batch_size:(i+1)*FLAGS.batch_size],
+                    keeprob_placeholder: 0.5,
+                    isTrain_placeholder: False
+                }
+                test_loss, test_accuracy = sess.run([loss, accuracy], feed_dict=test_feed_dic)
+                acc.append(test_accuracy)
+                test_losses.append(test_loss)
+            avg_acc  = float(np.mean(np.asarray(acc)))
+            avg_loss = float(np.mean(np.asarray(test_losses)))
+            test_summary = tf.Summary(value=[tf.Summary.Value(tag="accuracy", simple_value=avg_acc), tf.Summary.Value(tag="loss", simple_value=avg_loss)])
+            test_writer.add_summary(test_summary, i)
+            print('Test accuracy {:g}'.format(avg_acc))
+            print('Test loss {:g}'.format(avg_loss))
 
             # if i == 1:
             #     learning_rate *= 0.1
