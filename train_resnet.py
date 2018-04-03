@@ -13,7 +13,7 @@ with tf.device('/gpu:0'):
     flags.DEFINE_string('train_dir', 'res_logs',
     'Directory to put the training data.')
 
-    learning_rate = 0.001
+    learning_rate = 0.1
     # Put logs for each run in separate directory
     train_logdir = FLAGS.train_dir + '/' + datetime.now().strftime('%Y%m%d-%H%M%S') + '/train/'
     test_logdir = FLAGS.train_dir + '/'  + datetime.now().strftime('%Y%m%d-%H%M%S') + '/test/'
@@ -52,8 +52,10 @@ with tf.device('/gpu:0'):
     # -----------------------------------------------------------------------------
     # Run the TensorFlow graph
     # -----------------------------------------------------------------------------
-
-    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
+    config=tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.allow_growth=True
+    with tf.Session(config=config) as sess:
+    # with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
         sess.run(tf.global_variables_initializer())
         train_writer = tf.summary.FileWriter(train_logdir, sess.graph)
         test_writer = tf.summary.FileWriter(test_logdir)
@@ -109,7 +111,13 @@ with tf.device('/gpu:0'):
             # if i == 1:
             #     learning_rate *= 0.1
                 # train_step = resnet20.training(loss, learning_rate, global_step)
-            if (i+1)%10 == 0:
+            if (i+1) == 5:
+                learning_rate *= 0.1
+                train_step = resnet20.training(loss, learning_rate, global_step)
+            if (i+1) == 10:
+                learning_rate *= 0.1
+                train_step = resnet20.training(loss, learning_rate, global_step)
+            if (i+1) == 20:
                 learning_rate *= 0.1
                 train_step = resnet20.training(loss, learning_rate, global_step)
             # if (i + 1) % 20 == 0:

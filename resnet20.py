@@ -118,7 +118,7 @@ def loss(logits, labels):
     with tf.name_scope('Loss'):
         # Operation to determine the cross entropy between logits and labels
         vars   = tf.trainable_variables() 
-        lossL2 = tf.add_n([tf.nn.l2_loss(o) for o in tf.get_collection('weights')])
+        lossL2 = tf.add_n([tf.nn.l2_loss(o) for o in tf.get_collection('weights')])* 0.001
         loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
                                         logits=logits, labels=labels, name='cross_entropy')) + lossL2
 

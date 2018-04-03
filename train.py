@@ -114,7 +114,13 @@ with tf.device('/gpu:3'):
             test_writer.add_summary(test_summary, i)
             print("[epochtest] memory_usage=%f" % (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024), file=sys.stderr)
             print('Test accuracy {:g}'.format(test_accuracy))
-               
+
+            if(i+1)==5:
+                learning_rate = learning_rate*0.1
+                train_step = old_alexNet.training(loss, learning_rate, global_step)   
+            if(i+1)==10:
+                learning_rate = learning_rate*0.1
+                train_step = old_alexNet.training(loss, learning_rate, global_step)  
             if (i + 1) % 20 == 0:
                 checkpoint_file = os.path.join(FLAGS.train_dir, 'checkpoint')
                 saver.save(sess, checkpoint_file, global_step=i)
